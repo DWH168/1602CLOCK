@@ -1,0 +1,414 @@
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE 1602CLOCK
+OBJECT MODULE PLACED IN 1602Clock.OBJ
+COMPILER INVOKED BY: D:\Keil_v5\C51\BIN\C51.EXE 1602Clock.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include<reg51.h>
+   2          #include<intrins.h>
+   3          #define uchar unsigned char
+   4          #define uint unsigned int
+   5          sbit RS=P2^6;
+   6          sbit RW=P2^5;
+   7          sbit E=P2^7;
+   8          sbit K1=P1^0;
+   9          sbit K2=P1^1;
+  10          sbit K3=P1^2;
+  11          sbit K4=P1^3;
+  12          sbit K5=P1^4;
+  13          sbit BEEP=P3^0;
+  14          unsigned char cishu=0;
+  15          unsigned char mode_flag;//×´Ì¬±êÖ¾Î» 0±íÊ¾Õý´¦ÓÚÕý³££¬1ÉèÖÃÊ±¼ä£¬2ÉèÖÃÄÖÖÓ
+  16          unsigned char Current_Time[]={"Current Time  "};     //Õý³£ÔËÐÐÄ£Ê½
+  17          unsigned char Set_time[]={"Set New Time..."};      //ÉèÖÃÊ±¼äÄ£Ê½
+  18          unsigned char Set_nao[]={"Set nao Time..."};       //ÉèÖÃÄÖÖÓÄ£Ê½
+  19          unsigned char show_time[]={">00:00:00"};
+  20          unsigned char now_shi=12,now_fen=30,now_miao;//ÔËÐÐÊ±µÄÊ±¼ä±äÁ¿
+  21          unsigned char temp_shi,temp_fen,temp_miao;//µ÷Ê±¼äµÄÊ±¼ä±äÁ¿
+  22          unsigned char nao_shi=13,nao_fen=30,nao_miao;//ÄÖÖÓµÄÊ±¼ä±äÁ¿
+  23          unsigned char flag_sf; //0±íÊ¾ÉèÖÃÊ±£¬1±íÊ¾ÉèÖÃ·Ö
+  24          //¸èÇúÒôµ÷±àÂë
+  25          uchar code SONG_TONE[]={212,212,190,212,159,169,212,212,190,212,142,159,212,212,106,126,159,169,190,119,11
+             -9,126,159,142,159,0};
+  26          //¸èÇú³¤Òô½Ú
+  27          uchar code SONG_LONG[]={9,3,12,12,12,24,9,3,12,12,12,24,9,3,12,12,12,12,12,9,3,12,12,12,24,0};
+  28          
+  29            
+  30          void display_mode();
+  31          void display_time(unsigned char shi,unsigned char fen,unsigned char miao);  
+  32          void keyscan();
+  33          void PlayMusic();
+  34          void lcd_w_cmd(unsigned char com);
+  35          void lcd_w_dat(unsigned char dat);
+  36          void lcd_int ();
+  37          void delay1(unsigned int i);
+  38          unsigned char lcd_r_start();
+  39          void been(unsigned int time);
+  40          void main()
+  41          {      
+  42   1        lcd_int ();    //³õÊ¼»¯lcd
+  43   1        mode_flag=0;//ÔËÐÐ
+  44   1        display_mode();   //µ÷ÓÃÏÔÊ¾Ä£Ê½º¯Êý
+  45   1        TMOD=0x01;    //³õÊ¼»¯¶¨Ê±Æ÷
+  46   1        EA=1;      //´ò¿ª×ÜÖÐ¶Ï
+  47   1        TH0=(65536-50000)/256;      //¸³³õÖµ
+  48   1        TL0=(65536-50000)%256;
+  49   1        ET0=1;               //´ò¿ª¶¨Ê±Æ÷T0ÖÐ¶Ï±êÖ¾Î»
+  50   1        TR0=1;              //Æô¶¯T0
+  51   1        while(1){     
+  52   2            if(mode_flag==0)display_time(now_shi,now_fen,now_miao);     //×´Ì¬±êÖ¾Î»mode_flag=0±íÊ¾Õý´¦ÓÚÊ±¼äÕý³£ÔËÐ
+             -Ð
+  53   2            else display_time(temp_shi,temp_fen,temp_miao);       //·ñÔòmode_flagÎª1Ê±ÉèÖÃÊ±¼ä£¬Îª2Ê±ÉèÖÃÄÖÖÓ
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 2   
+
+  54   2            keyscan();         //µ÷ÓÃ°´¼ü¿ª¹Ø¿ØÖÆº¯Êý
+  55   2            if(now_shi==nao_shi&&now_fen==nao_fen&&now_miao==nao_miao) PlayMusic();   //Èç¹ûÕýÔÚÔËÐÐµÄÊ±¼äÎªÄÖÖÓµÄÊ
+             -±¼ä£¬ÔòÄÖÁåÏì£¨´ËÎªÒôÀÖ£©
+  56   2        } 
+  57   1      }
+  58          void display_mode()//µÚÒ»ÐÐÄ£Ê½µÄÏÔÊ¾£¬ÓÐÈýÖÖÄ£Ê½£º£¨1£©ÕýÔÚÔËÐÐµÄÏÔÊ¾Current_Time[]×Ö·û´®£¨2£©ÉèÖÃÊ±¼äµÄÏ
+             -ÔÊ¾Set_time[]×Ö·û´® £¨3£©ÉèÖÃÄÖÖÓµÄÏÔÊ¾Set_nao[]×Ö·û´®
+  59          {
+  60   1         
+  61   1        unsigned char i;
+  62   1        lcd_w_cmd(0x82);     //ÉèÖÃÏÔÊ¾µØÖ·£¨µÚÒ»ÐÐ£©
+  63   1        if(mode_flag==0)      //×´Ì¬±êÖ¾Î»mode_flag=0±íÊ¾Õý´¦ÓÚÊ±¼äÕý³£ÔËÐÐ
+  64   1        {
+  65   2          for(i=0;Current_Time[i]!='\0';i++)    //´Ë´¦ÏÔÊ¾Current_Time[]×Ö·û´®£¬×Ö·û´®½áÊø·ûÎª¡®0¡¯
+  66   2          {
+  67   3            lcd_w_dat(Current_Time[i]);
+  68   3            
+  69   3          } 
+  70   2        }
+  71   1        else if(mode_flag==1)
+  72   1        { 
+  73   2          for(i=0;Set_time[i]!='\0';i++)    //´Ë´¦ÏÔÊ¾Set_time[]×Ö·û´®£¬×Ö·û´®½áÊø·ûÎª¡®0¡¯
+  74   2          {
+  75   3            lcd_w_dat(Set_time[i]);
+  76   3          
+  77   3          }
+  78   2        }
+  79   1        else if(mode_flag==2)
+  80   1        {
+  81   2           for(i=0;Set_nao[i]!='\0';i++)    //´Ë´¦ÏÔÊ¾Set_nao[]×Ö·û´®£¬×Ö·û´®½áÊø·ûÎª¡®0¡¯
+  82   2          {
+  83   3            lcd_w_dat(Set_nao[i]);    
+  84   3          }
+  85   2        }
+  86   1      }
+  87          void display_time(unsigned char shi,unsigned char fen,unsigned char miao)//µÚ¶þÐÐµÄÊý×ÖÏÔÊ¾
+  88          {
+  89   1        unsigned char i;
+  90   1        if(mode_flag==0)show_time[0]=' ';  //Èç¹ûmode_flag=0£¬µÚ¶þÐÐµÚ0Î»ÏÔÊ¾' '
+  91   1        else  show_time[0]='>';        //·ñÔòµÚ¶þÐÐµÚ0Î»ÏÔÊ¾'>'
+  92   1      
+  93   1        show_time[1]=shi/10+0x30;      //µÚÒ»Î»ÏÔÊ¾Ê±µÄÊ®Î»Êý
+  94   1        show_time[2]=shi%10+0x30;     //µÚ¶þÎ»ÏÔÊ¾Ê±µÄ¸öÎ»Êý
+  95   1      
+  96   1        show_time[4]=fen/10+'0';       //µÚËÄÎ»ÏÔÊ¾·ÖµÄÊ®Î»Êý
+  97   1        show_time[5]=fen%10+'0';       //µÚÎåÎ»ÏÔÊ¾·ÖµÄ¸öÎ»Êý
+  98   1      
+  99   1        show_time[7]=miao/10+'0';       //µÚÆßÎ»ÏÔÊ¾ÃëµÄÊ®Î»Êý
+ 100   1        show_time[8]=miao%10+'0';       //µÚ°ËÎ»ÏÔÊ¾ÃëµÄ¸öÎ»Êý
+ 101   1      
+ 102   1        lcd_w_cmd(0xC3);  //¸ü¸ÄÏÔÊ¾Î»ÖÃÓÃ
+ 103   1        for(i=0;show_time[i]!='\0';i++)   //´Ë´¦ÏÔÊ¾show_time[]×Ö·û´®£¬×Ö·û´®½áÊø·ûÎª¡®0¡¯
+ 104   1        {
+ 105   2          lcd_w_dat(show_time[i]);
+ 106   2        
+ 107   2        }
+ 108   1      }
+ 109          void keyscan()            //°´¼ü¿ØÖÆ£¬k1µ÷Ê±»ò·Ö£¬k2¼ÓÊ±»ò·Ö£¬k3¼õÊ±»ò·Ö£¬k4È·¶¨µ÷ºÃµÄÊ±¼ä£¬k5µ÷ÄÖÖÓ
+ 110          {
+ 111   1        if(K1==0)
+ 112   1        {
+ 113   2          delay1(1000);
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 3   
+
+ 114   2          if(K1==0)
+ 115   2          {
+ 116   3            if(mode_flag==0)       //ÕýÔÚÔËÐÐµÄÊ±¼äÒª½øÈëµ÷Ê±¼äµÄ×´Ì¬
+ 117   3            {
+ 118   4              been(300);
+ 119   4                temp_shi=now_shi;   
+ 120   4              temp_fen=now_fen;
+ 121   4              temp_miao=now_miao;
+ 122   4              mode_flag=1;
+ 123   4            }
+ 124   3            else{ 
+ 125   4                been(300);
+ 126   4                flag_sf=~flag_sf; //ÇÐ»»×´Ì¬£¬flag_sf=0µ÷Ê±ÖÓ flag_sf=1µ÷·ÖÖÓ
+ 127   4               }
+ 128   3              display_mode();
+ 129   3            while(!K1); //ËÉÊÖ¼ì²â
+ 130   3          }
+ 131   2        }
+ 132   1        if(K2==0)             //¼ÓÊ±»ò·Ö
+ 133   1        {
+ 134   2          delay1(1000);
+ 135   2          if(K2==0)
+ 136   2          {
+ 137   3            if(mode_flag!=0)      
+ 138   3            { 
+ 139   4               been(300);
+ 140   4               if(flag_sf==0)     //µ÷Ê±ÖÓ×´Ì¬
+ 141   4               {
+ 142   5                  temp_shi++;
+ 143   5                if(temp_shi==24)temp_shi=0;    //Èç¹û¼ÓÊ±ÖÓµ½24¾ÍÇåÁã
+ 144   5               }
+ 145   4               else {                //µ÷·ÖÖÓ×´Ì¬
+ 146   5                  temp_fen++;
+ 147   5                if(temp_fen==60)temp_fen=0;     //Èç¹û¼Ó·ÖÖÓµ½60¾ÍÇåÁã
+ 148   5               }          
+ 149   4            }
+ 150   3            while(!K2); //ËÉÊÖ¼ì²â
+ 151   3          } 
+ 152   2        } 
+ 153   1        if(K3==0)              //¼õÊ±»ò·Ö
+ 154   1        {
+ 155   2          delay1(1000);
+ 156   2          if(K3==0)
+ 157   2          {
+ 158   3            if(mode_flag!=0)
+ 159   3            {
+ 160   4              been(300);
+ 161   4               if(flag_sf==0)        //µ÷Ê±ÖÓ×´Ì¬
+ 162   4               {
+ 163   5                
+ 164   5              if(temp_shi==0)temp_shi=24;   //Èç¹û¼õÊ±ÖÓ¼õµ½×îµÍµ½0¾ÍÓÖ»Øµ½×î¸ßÎ»24
+ 165   5                  temp_shi--;
+ 166   5                
+ 167   5               }
+ 168   4               else {            //µ÷·ÖÖÓ×´Ì¬
+ 169   5      
+ 170   5                if(temp_fen==0)temp_fen=60;     //Èç¹û¼õ·ÖÖÓ¼õµ½×îµÍµ½0¾ÍÓÖ»Øµ½×î¸ßÎ»60
+ 171   5                  temp_fen--; 
+ 172   5               }
+ 173   4                
+ 174   4            }
+ 175   3            
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 4   
+
+ 176   3            while(!K3); //ËÉÊÖ¼ì²â
+ 177   3          }
+ 178   2        
+ 179   2        }
+ 180   1                           //È·¶¨ÉèÖÃµÄÊ±¼äºÍµ÷ºÃÄÖÖÓµÄÊ±¼ä
+ 181   1        if(K4==0)
+ 182   1        {
+ 183   2          delay1(1000);
+ 184   2          if(K4==0)
+ 185   2          {
+ 186   3            if(mode_flag==1)          //ÉèÖÃÊ±¼ä  ÉèÖÃºÃµÄÊ±¼äÈ·¶¨ºóÕý³£ÔËÐÐ
+ 187   3            {
+ 188   4              been(300);
+ 189   4              now_shi=temp_shi;        
+ 190   4              now_fen=temp_fen;
+ 191   4              now_miao=temp_miao;
+ 192   4              mode_flag=0;
+ 193   4            }
+ 194   3            if(mode_flag==2)           //ÉèÖÃÄÖÖÓ ÉèÖÃºÃµÄÊ±¼äÈ·¶¨ºÃÖ®ºó¶¨ÎªÄÖÖÓ
+ 195   3            {                  
+ 196   4              been(300);
+ 197   4              nao_shi=temp_shi;
+ 198   4              nao_fen=temp_fen;
+ 199   4              nao_miao=temp_miao;
+ 200   4              mode_flag=0;
+ 201   4            }
+ 202   3            while(!K4); //ËÉÊÖ¼ì²â
+ 203   3          }
+ 204   2          display_mode();        //µ÷ÓÃÏÔÊ¾Ä£Ê½º¯Êý
+ 205   2        
+ 206   2        }
+ 207   1      
+ 208   1        if(K5==0)            //ÉèÖÃÄÖÖÓ
+ 209   1        {
+ 210   2          delay1(1000);
+ 211   2          if(K5==0)
+ 212   2          {
+ 213   3            if(mode_flag==0)
+ 214   3            {
+ 215   4               been(300);
+ 216   4               mode_flag=2;
+ 217   4               temp_shi=nao_shi;
+ 218   4               temp_fen=nao_fen;
+ 219   4               temp_miao=nao_miao;
+ 220   4            }     
+ 221   3            display_mode();
+ 222   3            while(!K5); //ËÉÊÖ¼ì²â
+ 223   3          }
+ 224   2        
+ 225   2        }
+ 226   1      }
+ 227          void been(unsigned int time)
+ 228          {
+ 229   1        unsigned int i;
+ 230   1        for(i=0;i<time;i++)
+ 231   1        {
+ 232   2           BEEP=~BEEP;      
+ 233   2           delay1(10);  
+ 234   2        }
+ 235   1      }
+ 236          void delay(uint ms)    //ÄÖÁåµÄÑÓÊ±º¯Êý
+ 237          {
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 5   
+
+ 238   1       char t;
+ 239   1       while(ms--) for(t=0;t<120;t++);
+ 240   1      }
+ 241          
+ 242          void PlayMusic()
+ 243          {
+ 244   1      uint i=0,j,k;
+ 245   1      while (SONG_LONG[i]!=0||SONG_TONE[i]!=0)
+ 246   1       {
+ 247   2        for(j=0;j<SONG_LONG[i]*30;j++)
+ 248   2        {
+ 249   3         BEEP=~BEEP;
+ 250   3         for(k=0;k<SONG_TONE[i]/4;k++);
+ 251   3        }
+ 252   2        delay(10);
+ 253   2        i++;
+ 254   2        display_time(now_shi,now_fen,now_miao); 
+ 255   2       }
+ 256   1      }
+ 257          //º¯ÊýÃû£ºtime0
+ 258          //º¯Êý¹¦ÄÜ£º¶¨Ê±Æ÷T0µÄÖÐ¶Ïº¯Êý£¬T0ÔÚ¹¤×÷·½Ê½1ÏÂÃ¿50ms²úÉúÖÐ¶Ï£¬Ö´ÐÐ¸ÃÖÐ¶Ïº¯Êý
+ 259          void time0() interrupt 1     
+ 260          {
+ 261   1        TH0=(65536-50000)/256;
+ 262   1        TL0=(65536-50000)%256;
+ 263   1      
+ 264   1        cishu++;
+ 265   1        if(cishu==20)        //Ò»ÃëÊ±¼äµ½ºó£¬´ÎÊýÇåÁã£¬ÃëÊý¼ÓÒ»
+ 266   1        {
+ 267   2          cishu=0;
+ 268   2          now_miao++;
+ 269   2        }
+ 270   1        if(now_miao==60)      //60ÃëÊ±¼äµ½ºó£¬ÃëÊýÇåÁã£¬·ÖÖÓ¼ÓÒ»
+ 271   1        {
+ 272   2          now_miao=0;
+ 273   2          now_fen++;
+ 274   2        }
+ 275   1      
+ 276   1        if(now_fen==60)       //60·ÖÖÓÊ±¼äµ½ºó£¬·ÖÖÓÇåÁã£¬Ê±ÖÓ¼ÓÒ»
+ 277   1        {
+ 278   2          
+ 279   2          now_fen=0;
+ 280   2          now_shi++;
+ 281   2        }
+ 282   1      
+ 283   1        if(now_shi==24)        //24Ð¡Ê±µ½ºó£¬Ê±ÖÓÇåÁã
+ 284   1        {
+ 285   2           now_shi=0;
+ 286   2        }
+ 287   1      }
+ 288          
+ 289          //º¯ÊýÃû£ºlcd_int
+ 290          //º¯Êý¹¦ÄÜ£ºlcd³õÊ¼»¯
+ 291          void lcd_int()
+ 292          {
+ 293   1        lcd_w_cmd(0x3c);  //ÉèÖÃ¹¤×÷·½Ê½
+ 294   1        lcd_w_cmd(0x0c);    //ÉèÖÃÏÔÊ¾×´Ì¬
+ 295   1        lcd_w_cmd(0x01);   //ÇåÆÁ
+ 296   1        lcd_w_cmd(0x06);   //ÉèÖÃÊäÈë·½Ê½
+ 297   1        lcd_w_cmd(0x80);   //ÉèÖÃ³õÊ¼ÏÔÊ¾Î»ÖÃ
+ 298   1      }
+ 299          //º¯ÊýÃû£ºlcd_w_cmd
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 6   
+
+ 300          //º¯Êý¹¦ÄÜ£ºÐ´ÃüÁî
+ 301          //ÐÎÊ½²ÎÊý£ºÃüÁî×ÖÒÑ¾­´æÈëcomµ¥ÔªÖÐ
+ 302          void lcd_w_cmd(unsigned char com)
+ 303          {
+ 304   1        unsigned char i;
+ 305   1        do
+ 306   1        {            //²élcdÃ¦×´Ì¬
+ 307   2        i=lcd_r_start();      //µ÷ÓÃ¶Á×´Ì¬×Öº¯Êý
+ 308   2        i&=0x80;           //¡°Óë¡±²Ù×÷ÆÁ±ÎµôµÍ7Î»
+ 309   2        delay1(2);
+ 310   2        }while(i!=0);       //lcdÃ¦£¬¼ÌÐø²éÑ¯£¬·ñÔòÍË³öÑ­»· 
+ 311   1        RW=0;
+ 312   1        delay1(1);
+ 313   1        RS=0;            //RW=0£¬RS=0£¬Ð´lcdÃüÁî×Ö
+ 314   1        delay1(1);
+ 315   1        E=1;              //E¶ËÊ±ÐòÒÔ0»ò1¸ßµÍ²¨¶¯
+ 316   1        delay1(1);
+ 317   1        P0=com;             //½«comÖÐµÄÃüÁî×ÖÐ´ÈëlcdÊý¾Ý¿Ú
+ 318   1        delay1(1);
+ 319   1        E=0;
+ 320   1        delay1(1);
+ 321   1        RW=1;
+ 322   1        delay1(2);
+ 323   1      }
+ 324          //º¯ÊýÃû£ºlcd_w_dat
+ 325          //º¯Êý¹¦ÄÜ£ºÐ´Êý¾Ý
+ 326          void lcd_w_dat(unsigned char dat)
+ 327          {
+ 328   1        unsigned char i;
+ 329   1        do
+ 330   1        {              //²éÃ¦²Ù×÷
+ 331   2        i=lcd_r_start();       //µ÷ÓÃ¶Á×´Ì¬×Öº¯Êý
+ 332   2        i&=0x80;           //¡°Óë¡±²Ù×÷ÆÁ±ÎµôµÍ7Î»
+ 333   2        delay1(2);
+ 334   2        }while(i!=0);        //lcdÃ¦£¬¼ÌÐø²éÑ¯£¬·ñÔòÍË³öÑ­»· 
+ 335   1        RW=0;
+ 336   1        delay1(1);
+ 337   1        RS=1;            //RW=0£¬RS=1£¬Ð´lcdÃüÁî×Ö
+ 338   1        delay1(1);
+ 339   1        E=1;              //E¶ËÊ±ÐòÒÔ0»ò1¸ßµÍ²¨¶¯
+ 340   1        delay1(1);
+ 341   1        P0=dat;              //½«datÖÐµÄÏÔÊ¾Êý¾ÝÐ´ÈëlcdÊý¾Ý¿Ú
+ 342   1        delay1(1);
+ 343   1        E=0;
+ 344   1        delay1(1);
+ 345   1        RW=1;
+ 346   1        delay1(2);
+ 347   1      }
+ 348          void delay1(unsigned int i)
+ 349          {
+ 350   1        unsigned int k;
+ 351   1        for(k=0;k<i;k++);
+ 352   1      }
+ 353          //º¯ÊýÃû£ºlcd_r_start
+ 354          //º¯Êý¹¦ÄÜ£º¶Á×´Ì¬×Ö
+ 355          unsigned char lcd_r_start()
+ 356          {
+ 357   1        unsigned char s;
+ 358   1        RW=1;       //RW=1,RS=0,¶Álcd×´Ì¬
+ 359   1        delay1(1);
+ 360   1        RS=0;
+ 361   1        delay1(1);
+C51 COMPILER V9.54   1602CLOCK                                                             01/10/2020 20:50:28 PAGE 7   
+
+ 362   1        E=1;         //E¶ËÊ±ÐòÒÔ0»ò1¸ßµÍ²¨¶¯
+ 363   1        delay1(1);
+ 364   1        s=P0;        //´ÓlcdµÄÊý¾Ý¿Ú¶Á×´Ì¬  
+ 365   1        delay1(1);
+ 366   1        E=0;
+ 367   1        delay1(1);
+ 368   1        RW=0;
+ 369   1        delay1(1);
+ 370   1        return(s);       //·µ»ØÖµs¶ÁÈ¡×´Ì¬Ã¦»ò¿ÕÏÐ
+ 371   1      }
+ 372          
+ 373          
+ 374          
+ 375          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    945    ----
+   CONSTANT SIZE    =     52    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     69      12
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
